@@ -3,15 +3,14 @@ name: Release Extension
 on:
   push:
     tags:
-      - 'v*' # Trigger workflow when tags starting with 'v' (e.g. v1.0.0) are pushed
-
-permissions:
-  contents: write # Required permission to create releases and upload asset files
+      - "v*" # Trigger workflow when tags starting with 'v' (e.g. v1.0.0) are pushed
 
 jobs:
   release:
     name: Build & Release Extension
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # Required permission to create releases and upload asset files
 
     steps:
       # 1. Checkout repository source code
@@ -29,7 +28,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'pnpm'
+          cache: "pnpm"
 
       # 4. Install project dependencies
       - name: Install Dependencies
@@ -45,7 +44,7 @@ jobs:
         with:
           files: gemini-chat-downloader.zip
           generate_release_notes: true # Automatically generates a premium changelog list from commits
-          draft: false                 # Set to false to publish the release immediately
-          prerelease: false            # Mark as formal stable release
+          draft: false # Set to false to publish the release immediately
+          prerelease: false # Mark as formal stable release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
