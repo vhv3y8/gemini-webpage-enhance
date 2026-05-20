@@ -1,0 +1,51 @@
+name: Release Extension
+
+on:
+  push:
+    tags:
+      - 'v*' # Trigger workflow when tags starting with 'v' (e.g. v1.0.0) are pushed
+
+permissions:
+  contents: write # Required permission to create releases and upload asset files
+
+jobs:
+  release:
+    name: Build & Release Extension
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Checkout repository source code
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # 2. Setup pnpm package manager (with cache support)
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 10 # Matches pnpm v10
+
+      # 3. Setup Node.js environment with pnpm store caching
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+
+      # 4. Install project dependencies
+      - name: Install Dependencies
+        run: pnpm install --frozen-lockfile
+
+      # 5. Compile TypeScript and generate the Chrome Extension ZIP archive
+      - name: Build & Package Zip
+        run: pnpm build:zip
+
+      # 6. Create GitHub Release and upload the packed extension archive
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: gemini-chat-downloader.zip
+          generate_release_notes: true # Automatically generates a premium changelog list from commits
+          draft: false                 # Set to false to publish the release immediately
+          prerelease: false            # Mark as formal stable release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
