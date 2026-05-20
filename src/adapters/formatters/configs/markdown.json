@@ -1,0 +1,11 @@
+{
+  "extension": "md",
+  "mimeType": "text/markdown;charset=utf-8",
+  "includeMetadata": true,
+  "metadataFormat": "# {title}\n- URL: {url}\n- Date: {date}\n\n---\n\n",
+  "userPrefix": "### User\n\n",
+  "modelPrefix": "### Gemini\n\n",
+  "messageSeparator": "\n\n---\n\n",
+  "codeBlockFormat": "```{language}\n{code}\n```\n\n",
+  "imageFormat": "![Image]({url})\n\n"
+}

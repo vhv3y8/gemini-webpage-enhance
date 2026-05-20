@@ -1,0 +1,11 @@
+{
+  "extension": "txt",
+  "mimeType": "text/plain;charset=utf-8",
+  "includeMetadata": true,
+  "metadataFormat": "Conversation: {title}\nURL: {url}\nDate: {date}\n\n========================================\n\n",
+  "userPrefix": "USER:\n",
+  "modelPrefix": "GEMINI:\n",
+  "messageSeparator": "\n========================================\n\n",
+  "codeBlockFormat": "[CODE BLOCK - {language}]\n{code}\n[END CODE BLOCK]\n\n",
+  "imageFormat": "[IMAGE: {url}]\n\n"
+}

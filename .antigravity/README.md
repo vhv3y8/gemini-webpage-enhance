@@ -1,0 +1,1 @@
+Create or fix summary files only when user explicitly requests.
