@@ -37,6 +37,29 @@ export class MenuInjector {
    * Injects our custom export options natively into the gem-menu container.
    */
   private injectMenuItems(menu: Element) {
+    // 1. Identify if the currently opened gem-menu belongs to the conversation actions menu.
+    // The three-dot button that triggers this specific menu is wrapped in a `<conversation-actions-icon>` element.
+    // When the menu is active, the trigger button inside it has the `aria-expanded="true"` attribute.
+    const activeTrigger = document.querySelector('conversation-actions-icon [aria-expanded="true"]');
+    if (!activeTrigger) {
+      return;
+    }
+
+    // 2. Correlate the menu's ID or placement with the trigger's `aria-controls` attribute to prevent wrong injection.
+    const ariaControls = activeTrigger.getAttribute('aria-controls');
+    if (ariaControls) {
+      const isMatchingMenu =
+        menu.id === ariaControls ||
+        menu.getAttribute('id') === ariaControls ||
+        menu.closest(`#${ariaControls}`) !== null ||
+        menu.querySelector(`#${ariaControls}`) !== null ||
+        document.getElementById(ariaControls)?.contains(menu);
+
+      if (!isMatchingMenu) {
+        return;
+      }
+    }
+
     // Prevent duplicate injections
     if (menu.querySelector('[value="export-markdown"]') || menu.querySelector('[value="export-plaintext"]')) {
       return;
