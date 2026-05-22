@@ -2,6 +2,8 @@
 
 ![](./promo/dropdown-capture.png)
 
+![](./promo/scroll-navigator-capture.png)
+
 Simple chrome extension to enhance gemini webpage experience.
 
 ### Features
