@@ -1,54 +1,33 @@
-import { ChatExporter } from './core/exporter';
-import { GeminiDomScraper } from './adapters/scrapers/gemini-dom';
-import { ConfigurableFormatter } from './adapters/formatters/configurable';
+import { ExportChatUseCase } from './core/usecases/export-chat';
+import { GeminiDomScraper } from './adapters/output/scrapers/gemini-dom';
+import { ConfigurableFormatter } from './adapters/output/formatters/configurable';
 import { MenuInjector } from './ui/menu-injector';
 import { ScrollNavigator } from './ui/scroll-navigator';
+import { GeminiDomMarkdownRepairer } from './adapters/output/markdown-repairer/gemini-dom-repairer';
+import { RepairMarkdownUseCase } from './core/usecases/repair-markdown';
+import { MarkdownFixer } from './adapters/input/markdown-fixer';
+import { BrowserFileExporter } from './infra/browser-file-exporter';
 
-import markdownConfig from './adapters/formatters/configs/markdown.json';
-import plaintextConfig from './adapters/formatters/configs/plaintext.json';
-
-// Helper to trigger a file download inside the Chrome Extension script context
-async function triggerDownload(exporter: ChatExporter) {
-  try {
-    const result = await exporter.export();
-
-    const blob = new Blob([result.content], { type: result.mimeType });
-    const url = URL.createObjectURL(blob);
-
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = result.filename;
-    document.body.appendChild(a);
-    a.click();
-
-    // Clean up virtual node
-    setTimeout(() => {
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    }, 100);
-
-    console.log(`[Gemini Downloader] Successfully downloaded: ${result.filename}`);
-  } catch (error) {
-    console.error('[Gemini Downloader] Export failed:', error);
-  }
-}
+import markdownConfig from './adapters/output/formatters/configs/markdown.json';
+import plaintextConfig from './adapters/output/formatters/configs/plaintext.json';
 
 // Bootstrapping the application (Composition Root)
 function bootstrap() {
   const scraper = new GeminiDomScraper();
+  const fileExporter = new BrowserFileExporter();
 
   // Instantiate configurable formatters using data-driven JSON configurations
   const markdownFormatter = new ConfigurableFormatter(markdownConfig);
   const plaintextFormatter = new ConfigurableFormatter(plaintextConfig);
 
-  // Instantiating Exporter services
-  const markdownExporter = new ChatExporter(scraper, markdownFormatter);
-  const plaintextExporter = new ChatExporter(scraper, plaintextFormatter);
+  // Instantiating Use Case Orchestrators with Ports and Infrastructure
+  const exportMarkdownUseCase = new ExportChatUseCase(scraper, markdownFormatter, fileExporter);
+  const exportPlaintextUseCase = new ExportChatUseCase(scraper, plaintextFormatter, fileExporter);
 
   // Initialize UI Menu Injector targeting Gemini native conversation dropdowns
   const injector = new MenuInjector(
-    () => triggerDownload(markdownExporter),
-    () => triggerDownload(plaintextExporter)
+    () => exportMarkdownUseCase.execute(),
+    () => exportPlaintextUseCase.execute()
   );
 
   injector.start();
@@ -58,6 +37,13 @@ function bootstrap() {
   const scrollNavigator = new ScrollNavigator();
   scrollNavigator.start();
   console.log('[Gemini Downloader] Scroll Navigator initialized.');
+
+  // Initialize UI Markdown Repair Fixer to automatically detect and repair broken layout streamings
+  const repairer = new GeminiDomMarkdownRepairer();
+  const repairUseCase = new RepairMarkdownUseCase(repairer);
+  const markdownFixer = new MarkdownFixer(repairUseCase);
+  markdownFixer.start();
+  console.log('[Gemini Downloader] Markdown Fixer UI initialized.');
 }
 
 // Start bootstrapping immediately

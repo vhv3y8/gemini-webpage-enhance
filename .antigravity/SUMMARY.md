@@ -20,27 +20,40 @@
 
 ## 2. 클린 아키텍처 (Ports & Adapters) 구조
 
-도메인 핵심 로직과 기술적 세부사항을 엄격하게 단방향 의존성으로 격리했습니다.
+도메인 핵심 로직과 기술적 세부사항을 대칭적이고 엄격한 단방향 의존성으로 격리했습니다.
 
 ```
 src/
-├── core/                       # [Domain Layer] 비즈니스 로직 및 코어 사양
+├── core/                           # [Domain Layer] 비즈니스 로직 및 코어 사양
 │   ├── models/
-│   │   └── chat.ts             # 데이터 구조체 (ChatSession, ChatMessage, ExportResult)
-│   └── ports/
-│       ├── scraper.ts          # [Port] 입력을 위한 스크래퍼 경계 인터페이스
-│       └── formatter.ts        # [Port] 출력을 위한 포매터 경계 인터페이스
-├── adapters/                   # [Technical Layer] 구체적인 입출력 구현부 (플러그인 방식)
-│   ├── scrapers/
-│   │   └── gemini-dom.ts       # [Adapter] 제미나이 DOM 노드를 크롤링하는 스크래퍼
-│   └── formatters/
-│       ├── configurable.ts     # [Adapter] JSON 파일에 반응하여 출력을 조립하는 포매터
-│       └── configs/            # 선언적 포맷 사양 명세 데이터
-│           ├── markdown.json   # 마크다운 포맷 규칙
-│           └── plaintext.json  # 텍스트 포맷 규칙
-├── ui/                         # [Presentation Layer] 브라우저 인터페이스
-│   └── menu-injector.ts        # 제미나이 네이티브 드롭다운 동적 추적 및 버튼 렌더러
-└── content.ts                  # [Composition Root] 서비스 조립 및 크롬 확장 기동
+│   │   └── chat.ts                 # 데이터 구조체 (ChatSession, ChatMessage, ExportResult)
+│   ├── ports/
+│   │   ├── scraper.ts              # [Port] 입력을 위한 스크래퍼 경계 인터페이스
+│   │   ├── formatter.ts            # [Port] 출력을 위한 포매터 경계 인터페이스
+│   │   └── file-exporter.ts        # [Port] 최종 파일 출력을 위한 경계 인터페이스 [NEW]
+│   └── usecases/
+│       ├── export-chat.ts          # [Use Case] 내보내기 흐름을 포트를 통해 조율 및 위임 [RENAME]
+│       └── repair-markdown.ts      # [Use Case] 마크다운 복구 흐름 조율 및 실행
+├── adapters/                       # [Technical Layer] 구체적인 기술 어댑터 구현부 (입/출력 대칭 설계)
+│   ├── input/                      # [Driving Adapters] 주동 어댑터 (이벤트 트리거)
+│   │   └── markdown-fixer.ts       # [Adapter] DOM 변화 감시 및 수리 버튼 주입 트리거
+│   └── output/                     # [Driven Adapters] 피동 어댑터 (기술적 대상 적용)
+│       ├── scrapers/
+│       │   └── gemini-dom.ts       # [Adapter] 제미나이 DOM 노드를 크롤링하는 스크래퍼
+│       ├── formatters/
+│       │   ├── configurable.ts     # [Adapter] JSON 설정 기반의 다목적 문자열 포매터
+│       │   └── configs/            # 선언적 JSON 포맷 규칙 명세 데이터
+│       │       ├── markdown.json   # 마크다운 포맷 JSON 설정
+│       │       └── plaintext.json  # 텍스트 포맷 JSON 설정
+│       └── markdown-repairer/
+│           └── gemini-dom-repairer.ts # [Adapter] DOM 요소 내 마크다운을 분석/치환하는 수리 어댑터
+├── infra/                          # [Infrastructure Layer] 저수준 실행 플랫폼 기술 및 구문 유틸리티
+│   ├── browser-file-exporter.ts    # 브라우저 가상 앵커 조작 기반 파일 저장기 구현체 [NEW]
+│   └── simple-markdown-parser.ts   # 바닐라 DOM 기반의 경량 독립형 마크다운 파서 유틸리티
+├── ui/                             # [Presentation Layer] 브라우저 인터페이스
+│   ├── menu-injector.ts            # 제미나이 네이티브 드롭다운 동적 추적 및 버튼 렌더러
+│   └── scroll-navigator.ts         # 우측 스크롤 영역 질문 단위 숏컷 내비게이터
+└── content.ts                      # [Composition Root] 의존성 생성, 조립 및 크롬 확장 프로그램 기동
 ```
 
 ---
@@ -80,15 +93,23 @@ src/
 - **다중 다운로드 양식 지원**:
   - 리팩토링된 JSON 설정 덕분에 마크다운 다운로드(**Export Markdown**)뿐만 아니라 텍스트 전용 내보내기(**Export Plain Text**) 항목까지 총 2개의 버튼을 구분선과 함께 이식하여 기능적 완성도를 극대화했습니다.
 - **우측 스크롤바 영역 플로팅 네비게이터 (Scroll-Navigator) 구현**:
-  - **대화 스크롤바 컨테이너 정밀 표적화**: 제미나이 화면 상 다수의 무한 스크롤 영역 중 메인 대화창(`chat-window infinite-scroller`)만을 특정화하여 감지하고, 네비게이터 요소를 스크롤 컨테이너의 *부모* 노드에 주입하여 스크롤 시 버튼이 함께 위로 휩쓸려 밀려나는 absolute 배치 한계를 완전히 해결했습니다.
+  - **대화 스크롤바 컨테이너 정밀 표적화**: 제미나이 화면 상 다수의 무한 스크롤 영역 중 메인 대화창(`chat-window infinite-scroller`)만을 특정화하여 감지하고, 네비게이터 요소를 스크롤 컨테이너의 _부모_ 노드에 주입하여 스크롤 시 버튼이 함께 위로 휩쓸려 밀려나는 absolute 배치 한계를 완전히 해결했습니다.
   - **컴퓨티드 패딩 보정 (Dynamic Bounds)**: 고정된 높이를 쓰지 않고 컨테이너의 `padding-top` 및 `padding-bottom` 픽셀 크기를 실시간 계산하여 네비게이터의 상/하단 절대 마진선(16px 오프셋)을 잡음으로써, 상단 뷰포트 헤더나 하단 채팅 입력창과 겹치는 간섭 현상을 원천 방지했습니다.
   - **구체 트랙 정밀 안착 공식 (Encased Bounds Math)**: `26px` 너비의 버튼들이 트랙 라운드 레일 캡을 벗어나지 않도록 `calc((${pct * 100}% - ${pct * 26}px) + 13px)` 정렬 공식을 도입하여, 극값인 0% 및 100% 한계 위치에서도 네비게이션 버튼이 트랙 캡슐 내부에 항상 밀착 및 포함되도록 정밀 배치했습니다.
-  - **5줄 멀티라인 요약 툴팁 설계 & 렌더링 버그 격파**: 
+  - **5줄 멀티라인 요약 툴팁 설계 & 렌더링 버그 격파**:
     - `<user-query>` 엘리먼트를 복제한 후 스크린 리더용 숨김 텍스트와 불필요한 미디어 버튼 노이즈를 완전 소거한 본문만을 요약 툴팁에 노출합니다.
     - 툴팁이 좁은 절대 좌표 영역에서 단어 단위로 세로로 찌그러지던 문제를 `width: max-content`와 `max-width: 250px` 설정으로 정복했습니다.
     - 컴파일/압축 번들링 과정에서 카멜 케이스 주입 시 속성이 탈락해 생략선 다음 줄에 글자가 계속 노출되던 브라우저 렌더링 버그를 우회하기 위해, DOM 메서드인 `.setProperty('-webkit-box-orient', 'vertical')` 및 `.setProperty('-webkit-line-clamp', '5')`를 명시적으로 주입하여 5줄 한도로 깨끗하게 오버플로우를 감추었습니다.
     - 호버 피드백을 단정하게 유지하고자 슬라이딩 모션을 삭제하고 컴팩트한 `opacity 0.12s ease-out` 페이드 전환 효과만 탑재했습니다.
   - **커스텀 cubic-bezier 부드러운 스크롤 엔진 (`smoothScrollTo`)**: 느리고 프레임이 끊기는 네이티브 `scrollIntoView()`를 완전히 대체하는 물리적 스크롤 프레임 엔진을 구축했습니다. `requestAnimationFrame` 루프 내에서 가감속 곡선이 뛰어난 `easeInOutCubic` 이징 함수를 작동시켜, 스크롤 거리와 상관없이 정확히 **350ms** 시간 동안 부드럽게 감속하며 대상 질문 단락을 컨테이너 패딩 한계선에 딱 맞추어 정확하게 상단 스냅 정렬시킵니다.
+- **제미나이 불완전 마크다운 렌더링 실시간 복구 (Markdown Repairer) 엔진**:
+  - **어긋난 HTML 스트리밍 감지**: 제미나이가 스트리밍 응답 도중 어긋난 마크다운 마크업(예: 닫히지 않은 코드 블록 등)을 생성하여 브라우저 렌더링이 심각하게 깨지고 코드 복사 바(Angular code-block)가 부분부분 엉뚱하게 오작동하는 현상을 실시간 DOM 감시를 통해 영리하게 포착합니다.
+  - **경량 독립형 파서 구축 (`SimpleMarkdownParser`)**: 서드파티 하이라이팅 라이브러리 없이 순수 정규식과 Vanilla DOM API만으로 작동하는 초경량 정적 마크다운 파서를 `src/infra/`에 설계했습니다. 라이트/다크 테마 환경을 스스로 추적하여 눈이 편안한 고대비 테마 역전형 코드박스를 동적으로 빌드해 냅니다.
+  - **무손실 DOM 서브트리 스왑 (`GeminiDomMarkdownRepairer`)**: Angular 데이터 바인딩이 묶인 최상위 요소나 복사/다운로드 기능이 오버레이된 원형 헤더 컨트롤군을 파괴하지 않고, 마크다운 문법이 유실되어 깨진 inner `<pre>` 요소만 미세 표적 사격하듯 타겟팅하여 무손실로 안전하게 스왑 교체합니다.
+  - **프리미엄 노이즈 프리 수리 버튼 (`MarkdownFixer`)**: 본문 텍스트를 절대 침범하지 않도록 코드 블록의 우측 밖 오프셋 좌표(`-60px`) 영역에 Gemini 전용 테마를 적용한 문자가 들어간 `"Fix"` 배지를 주입합니다. 호버 배경 전환이 부드럽게 감도는 이 버튼을 클릭하면 300ms의 페이드 마이크로 애니메이션과 함께 화면이 실시간 복구됩니다.
+- **의존성 역전 원칙(DIP)을 통한 무결한 파일 다운로드 파이프라인**:
+  - **인프라 캡슐화 (`BrowserFileExporter`)**: 가상 앵커를 띄워 다운로드를 물리적으로 촉발하는 저수준 DOM 조작 기술을 진입점(`content.ts`)에서 도려내어 전용 인프라 파일로 깔끔하게 격리 및 캡슐화했습니다.
+  - **순수 비즈니스 유스케이스 위임 (`ExportChatUseCase`)**: 코어 영역의 `ExportChatUseCase`는 특정 브라우저나 DOM에 대해 1%도 알 필요가 없도록 추상화된 포트(`FileExporter`)에만 의존하며, 최종 조율이 끝난 직후 포트에 다운로드 실행을 온전히 위임(Delegate)하여 비즈니스 절차를 종결합니다.
 - **성능과 크기 최적화**:
   - 핵심 소스코드는 불필요한 서드파티 라이브러리를 단 하나도 도입하지 않고 오직 순수 바닐라 DOM API와 Web Utility를 기반으로만 구현하여, 컴파일 결과물 파일 크기를 **30.59 kB** 수준으로 초경량화하고 배포 안전성을 높였습니다.
 

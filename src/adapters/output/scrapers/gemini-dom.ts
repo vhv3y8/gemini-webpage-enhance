@@ -1,5 +1,5 @@
-import { ChatScraper } from '../../core/ports/scraper';
-import { ChatSession, ChatMessage, ChatMessagePart } from '../../core/models/chat';
+import { ChatScraper } from '../../../core/ports/scraper';
+import { ChatSession, ChatMessage, ChatMessagePart } from '../../../core/models/chat';
 
 export class GeminiDomScraper implements ChatScraper {
   async scrape(): Promise<ChatSession> {
@@ -80,7 +80,7 @@ export class GeminiDomScraper implements ChatScraper {
   /**
    * Parses the HTML elements inside the model's markdown container into structured parts.
    */
-  private parseModelContent(container: Element): ChatMessagePart[] {
+  public parseModelContent(container: Element): ChatMessagePart[] {
     const parts: ChatMessagePart[] = [];
     let accumulatedText = '';
 

@@ -1,14 +1,15 @@
-import { ChatScraper } from './ports/scraper';
-import { ChatFormatter } from './ports/formatter';
-import { ExportResult } from './models/chat';
+import { ChatScraper } from '../ports/scraper';
+import { ChatFormatter } from '../ports/formatter';
+import { FileExporter } from '../ports/file-exporter';
 
-export class ChatExporter {
+export class ExportChatUseCase {
   constructor(
     private scraper: ChatScraper,
-    private formatter: ChatFormatter
+    private formatter: ChatFormatter,
+    private fileExporter: FileExporter
   ) {}
 
-  async export(): Promise<ExportResult> {
+  async execute(): Promise<void> {
     const session = await this.scraper.scrape();
     const content = this.formatter.format(session);
     
@@ -22,10 +23,11 @@ export class ChatExporter {
     const dateStr = new Date(session.scrapedAt).toISOString().split('T')[0];
     const filename = `${safeTitle || 'gemini_chat'}_${dateStr}.${this.formatter.getFileExtension()}`;
 
-    return {
+    // Delegate the file exporting responsibility entirely to the Port boundary!
+    await this.fileExporter.exportFile({
       content,
       filename,
       mimeType: this.formatter.getMimeType(),
-    };
+    });
   }
 }
