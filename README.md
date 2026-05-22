@@ -1,8 +1,13 @@
-# Gemini Webpage Download Markdown
+# Gemini Webpage Enhance
 
 ![](./promo/dropdown-capture.png)
 
-Simple chrome extension to download gemini page chat.
+Simple chrome extension to enhance gemini webpage experience.
+
+### Features
+
+- Download chat message as markdown
+- Smooth scrolling navigator to jump between messages
 
 ### How to build
 
