@@ -2,6 +2,7 @@ import { ChatExporter } from './core/exporter';
 import { GeminiDomScraper } from './adapters/scrapers/gemini-dom';
 import { ConfigurableFormatter } from './adapters/formatters/configurable';
 import { MenuInjector } from './ui/menu-injector';
+import { ScrollNavigator } from './ui/scroll-navigator';
 
 import markdownConfig from './adapters/formatters/configs/markdown.json';
 import plaintextConfig from './adapters/formatters/configs/plaintext.json';
@@ -52,6 +53,11 @@ function bootstrap() {
 
   injector.start();
   console.log('[Gemini Downloader] Native UI Menu Injector initialized.');
+
+  // Initialize UI Scroll Navigator targeting Gemini chat scrollbars
+  const scrollNavigator = new ScrollNavigator();
+  scrollNavigator.start();
+  console.log('[Gemini Downloader] Scroll Navigator initialized.');
 }
 
 // Start bootstrapping immediately
