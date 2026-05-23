@@ -1,5 +1,5 @@
-import { ChatFormatter } from '../../../core/ports/formatter';
-import { ChatSession } from '../../../core/models/chat';
+import { ChatFormatter } from '@content/core/ports/formatter';
+import { ChatSession } from '@shared/models/chat';
 
 export interface FormatterConfig {
   extension: string;

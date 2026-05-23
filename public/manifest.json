@@ -4,8 +4,12 @@
   "version": "0.1.0",
   "description": "Download your Gemini chat history as Markdown.",
   "permissions": [
-    "activeTab"
+    "activeTab",
+    "storage"
   ],
+  "background": {
+    "service_worker": "sw.js"
+  },
   "content_scripts": [
     {
       "matches": ["https://gemini.google.com/*"],

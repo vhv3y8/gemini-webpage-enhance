@@ -1,8 +1,8 @@
-# Gemini Chat Downloader - Project Summary
+# Gemini Chat Downloader - Architecture & Technical Summary
 
-구글 제미나이(Gemini) 웹페이지에서 활성화된 대화 내역을 감지하여 사용자가 지정한 다양한 포맷(Markdown, Plain Text 등)으로 완벽하게 다운로드해 주는 구글 크롬 확장 프로그램 프로젝트입니다.
+구글 제미나이(Gemini) 웹페이지에서 활성화된 대화 내역을 감지하여 사용자가 지정한 다양한 포맷(Markdown, Plain Text 등)으로 완벽하게 다운로드하고, 대화창 너비를 제어하는 등 강력하고 이질감 없는 프리미엄 사용자 경험을 주입해 주는 구글 크롬 확장 프로그램 프로젝트입니다.
 
-기획부터 네이티브 UI 이식 및 클린 아키텍처 리팩토링까지 반영된 세부 구현 명세와 핵심 설계 철학을 요약 정리합니다.
+본 문서는 프로젝트의 세부 아키텍처 설계와 실제 서비스 페이지의 DOM 구조 분석 해결 사양, 고성능 UI/UX 제어 공식 및 커스텀 노드 빌드 시스템 작동 명세까지 총망라하여 정리한 기술 요약본입니다. 처음 조인한 개발자나 에이전트가 코드를 하나하나 분석하지 않고도 전체 작동 철학과 세부 구현을 완벽히 장악할 수 있도록 보정되었습니다.
 
 ---
 
@@ -20,41 +20,38 @@
 
 ## 2. 클린 아키텍처 (Ports & Adapters) 구조
 
-도메인 핵심 로직과 기술적 세부사항을 대칭적이고 엄격한 단방향 의존성으로 격리했습니다.
+본 프로젝트는 도메인 핵심 비즈니스 로직과 저수준의 실행 환경 사양을 완벽히 격리하기 위해 콘텐츠 스크립트(Content Script)와 백그라운드 서비스 워커(Service Worker) 영역을 정밀하게 격리 및 분할하여 다계층 클린 아키텍처를 구현했습니다.
 
 ```
 src/
-├── core/                           # [Domain Layer] 비즈니스 로직 및 코어 사양
-│   ├── models/
-│   │   └── chat.ts                 # 데이터 구조체 (ChatSession, ChatMessage, ExportResult)
-│   ├── ports/
-│   │   ├── scraper.ts              # [Port] 입력을 위한 스크래퍼 경계 인터페이스
-│   │   ├── formatter.ts            # [Port] 출력을 위한 포매터 경계 인터페이스
-│   │   └── file-exporter.ts        # [Port] 최종 파일 출력을 위한 경계 인터페이스 [NEW]
-│   └── usecases/
-│       ├── export-chat.ts          # [Use Case] 내보내기 흐름을 포트를 통해 조율 및 위임 [RENAME]
-│       └── repair-markdown.ts      # [Use Case] 마크다운 복구 흐름 조율 및 실행
-├── adapters/                       # [Technical Layer] 구체적인 기술 어댑터 구현부 (입/출력 대칭 설계)
-│   ├── input/                      # [Driving Adapters] 주동 어댑터 (이벤트 트리거)
-│   │   └── markdown-fixer.ts       # [Adapter] DOM 변화 감시 및 수리 버튼 주입 트리거
-│   └── output/                     # [Driven Adapters] 피동 어댑터 (기술적 대상 적용)
-│       ├── scrapers/
-│       │   └── gemini-dom.ts       # [Adapter] 제미나이 DOM 노드를 크롤링하는 스크래퍼
-│       ├── formatters/
-│       │   ├── configurable.ts     # [Adapter] JSON 설정 기반의 다목적 문자열 포매터
-│       │   └── configs/            # 선언적 JSON 포맷 규칙 명세 데이터
-│       │       ├── markdown.json   # 마크다운 포맷 JSON 설정
-│       │       └── plaintext.json  # 텍스트 포맷 JSON 설정
-│       └── markdown-repairer/
-│           └── gemini-dom-repairer.ts # [Adapter] DOM 요소 내 마크다운을 분석/치환하는 수리 어댑터
-├── infra/                          # [Infrastructure Layer] 저수준 실행 플랫폼 기술 및 구문 유틸리티
-│   ├── browser-file-exporter.ts    # 브라우저 가상 앵커 조작 기반 파일 저장기 구현체 [NEW]
-│   └── simple-markdown-parser.ts   # 바닐라 DOM 기반의 경량 독립형 마크다운 파서 유틸리티
-├── ui/                             # [Presentation Layer] 브라우저 인터페이스
-│   ├── menu-injector.ts            # 제미나이 네이티브 드롭다운 동적 추적 및 버튼 렌더러
-│   └── scroll-navigator.ts         # 우측 스크롤 영역 질문 단위 숏컷 내비게이터
-└── content.ts                      # [Composition Root] 의존성 생성, 조립 및 크롬 확장 프로그램 기동
+├── shared/                         # [Shared Layer] 컴파일 스코프 공유 파일
+│   └── models/                     # 데이터 구조체 정의 (chat.ts, settings.ts)
+│
+├── content/                        # [Presentation & Content Script Domain]
+│   ├── core/                       # 비즈니스 인터페이스 (Ports)
+│   │   ├── ports/                  # 스크래퍼/포매터/설정 클라이언트 경계 Ports
+│   │   └── usecases/               # 대화 내보내기/마크다운 수리 Use Cases
+│   ├── adapters/                   # 구체적 기술 어댑터 구현부 (Adapters)
+│   │   ├── input/                  # DOM 변동 감시 및 마크다운 복구 트리거
+│   │   └── output/                 # Gemini DOM 스크래퍼, 설정 기반 문자열 포매터
+│   ├── infra/                      # 브라우저 가상 다운로드 앵커, 서비스 워커 송수신 클라이언트
+│   ├── ui/                         # Gemini 네이티브 UI 합성 컴포넌트 (너비 슬라이더, 내비게이터, 메뉴 주입)
+│   └── content.ts                  # 콘텐츠 스크립트 진입점 (Composition Root)
+│
+└── sw/                             # [Service Worker Background Domain]
+    ├── application/                # 백그라운드 서비스 애플리케이션 흐름
+    │   ├── ports/                  # 스토리지 입출력 경계 Port (SettingsRepository)
+    │   └── usecases/               # 스토리지 조회/저장 Use Cases (get-settings, save-settings)
+    ├── adapters/                   # 저수준 스토리지 어댑터 (chrome.storage.local 캡슐화)
+    └── sw.ts                       # 서비스 워커 백그라운드 진입점 (Runtime Message Dispatcher)
 ```
+
+### 아키텍처 핵심 연결 흐름 (Settings 조회/저장 프로세스 예시)
+
+1. **Trigger**: `ChatWidthAdjuster`(UI)가 조작되거나 페이지가 처음 로드되면 `SwSettingsClient`(Infra Adapter)를 호출합니다.
+2. **Message Passing**: `SwSettingsClient`가 `chrome.runtime.sendMessage`를 통해 백그라운드 서비스 워커로 메시지를 송신합니다.
+3. **SW Dispatcher**: 백그라운드의 `sw.ts`가 메시지를 가로채어 `GetSettingsUseCase` 또는 `SaveSettingsUseCase`를 구동합니다.
+4. **Storage Execution**: Use Case는 추상화된 포트(`SettingsRepository`)를 매개로 저수준의 `ChromeStorageRepository`를 실행하여 `chrome.storage.local` 물리 저장소에 데이터를 읽고 씁니다.
 
 ---
 
@@ -85,45 +82,81 @@ src/
 
 ## 4. 네이티브 UI 이식 디테일 및 고려한 부분
 
-- **이질감 0%의 네이티브 드롭다운 버튼 설계 및 정밀한 타겟 매칭**:
-  - 플로팅 버튼은 페이지의 중요한 영역(예: 스크롤 하단 바, 채팅 프롬프트 박스 등)을 가릴 우려가 있습니다.
-  - 제미나이 상단의 대화 설정 버튼을 누르면 동적으로 삽입되는 `<gem-menu role="menu">` 드롭다운의 렌더링 시점을 `MutationObserver`로 포착합니다.
-  - 이 드롭다운 메뉴 내부에 구글의 머티리얼 심볼(Material Symbols) 아이콘(`download` 및 `description`), 폰트 패밀리, 호버 시 페이드 인 배경 색상 트랜지션, 구분선 투명도를 완벽히 이식한 `<gem-menu-item>` 노드를 수동으로 빌드 및 조립하여 주입했습니다.
-  - **오주입 차단을 위한 타겟 특정화**: `gem-menu` 엘리먼트가 모델 변경 드롭다운 등 다른 UI 요소에서도 범용으로 쓰이므로, 상단 점 3개 메뉴에만 내보내기 버튼이 정확하게 주입되도록 탑레벨 컴포넌트 `<conversation-actions-icon>` 내에서 현재 활성화된(`aria-expanded="true"`) 버튼의 `aria-controls` ID를 동적으로 추출하고, 이 ID가 생성된 `gem-menu` 요소의 ID 혹은 관계 구조와 정확히 매칭할 때만 주입을 허용하는 이중 검증 구조를 설계하여 UI 주입의 강건성을 완벽히 확보했습니다.
-- **다중 다운로드 양식 지원**:
-  - 리팩토링된 JSON 설정 덕분에 마크다운 다운로드(**Export Markdown**)뿐만 아니라 텍스트 전용 내보내기(**Export Plain Text**) 항목까지 총 2개의 버튼을 구분선과 함께 이식하여 기능적 완성도를 극대화했습니다.
-- **우측 스크롤바 영역 플로팅 네비게이터 (Scroll-Navigator) 구현**:
-  - **대화 스크롤바 컨테이너 정밀 표적화**: 제미나이 화면 상 다수의 무한 스크롤 영역 중 메인 대화창(`chat-window infinite-scroller`)만을 특정화하여 감지하고, 네비게이터 요소를 스크롤 컨테이너의 _부모_ 노드에 주입하여 스크롤 시 버튼이 함께 위로 휩쓸려 밀려나는 absolute 배치 한계를 완전히 해결했습니다.
-  - **컴퓨티드 패딩 보정 (Dynamic Bounds)**: 고정된 높이를 쓰지 않고 컨테이너의 `padding-top` 및 `padding-bottom` 픽셀 크기를 실시간 계산하여 네비게이터의 상/하단 절대 마진선(16px 오프셋)을 잡음으로써, 상단 뷰포트 헤더나 하단 채팅 입력창과 겹치는 간섭 현상을 원천 방지했습니다.
-  - **구체 트랙 정밀 안착 공식 (Encased Bounds Math)**: `26px` 너비의 버튼들이 트랙 라운드 레일 캡을 벗어나지 않도록 `calc((${pct * 100}% - ${pct * 26}px) + 13px)` 정렬 공식을 도입하여, 극값인 0% 및 100% 한계 위치에서도 네비게이션 버튼이 트랙 캡슐 내부에 항상 밀착 및 포함되도록 정밀 배치했습니다.
-  - **5줄 멀티라인 요약 툴팁 설계 & 렌더링 버그 격파**:
-    - `<user-query>` 엘리먼트를 복제한 후 스크린 리더용 숨김 텍스트와 불필요한 미디어 버튼 노이즈를 완전 소거한 본문만을 요약 툴팁에 노출합니다.
-    - 툴팁이 좁은 절대 좌표 영역에서 단어 단위로 세로로 찌그러지던 문제를 `width: max-content`와 `max-width: 250px` 설정으로 정복했습니다.
-    - 컴파일/압축 번들링 과정에서 카멜 케이스 주입 시 속성이 탈락해 생략선 다음 줄에 글자가 계속 노출되던 브라우저 렌더링 버그를 우회하기 위해, DOM 메서드인 `.setProperty('-webkit-box-orient', 'vertical')` 및 `.setProperty('-webkit-line-clamp', '5')`를 명시적으로 주입하여 5줄 한도로 깨끗하게 오버플로우를 감추었습니다.
-    - 호버 피드백을 단정하게 유지하고자 슬라이딩 모션을 삭제하고 컴팩트한 `opacity 0.12s ease-out` 페이드 전환 효과만 탑재했습니다.
-  - **커스텀 cubic-bezier 부드러운 스크롤 엔진 (`smoothScrollTo`)**: 느리고 프레임이 끊기는 네이티브 `scrollIntoView()`를 완전히 대체하는 물리적 스크롤 프레임 엔진을 구축했습니다. `requestAnimationFrame` 루프 내에서 가감속 곡선이 뛰어난 `easeInOutCubic` 이징 함수를 작동시켜, 스크롤 거리와 상관없이 정확히 **350ms** 시간 동안 부드럽게 감속하며 대상 질문 단락을 컨테이너 패딩 한계선에 딱 맞추어 정확하게 상단 스냅 정렬시킵니다.
-- **제미나이 불완전 마크다운 렌더링 실시간 복구 (Markdown Repairer) 엔진**:
-  - **어긋난 HTML 스트리밍 감지**: 제미나이가 스트리밍 응답 도중 어긋난 마크다운 마크업(예: 닫히지 않은 코드 블록 등)을 생성하여 브라우저 렌더링이 심각하게 깨지고 코드 복사 바(Angular code-block)가 부분부분 엉뚱하게 오작동하는 현상을 실시간 DOM 감시를 통해 영리하게 포착합니다.
-  - **경량 독립형 파서 구축 (`SimpleMarkdownParser`)**: 서드파티 하이라이팅 라이브러리 없이 순수 정규식과 Vanilla DOM API만으로 작동하는 초경량 정적 마크다운 파서를 `src/infra/`에 설계했습니다. 라이트/다크 테마 환경을 스스로 추적하여 눈이 편안한 고대비 테마 역전형 코드박스를 동적으로 빌드해 냅니다.
-  - **무손실 DOM 서브트리 스왑 (`GeminiDomMarkdownRepairer`)**: Angular 데이터 바인딩이 묶인 최상위 요소나 복사/다운로드 기능이 오버레이된 원형 헤더 컨트롤군을 파괴하지 않고, 마크다운 문법이 유실되어 깨진 inner `<pre>` 요소만 미세 표적 사격하듯 타겟팅하여 무손실로 안전하게 스왑 교체합니다.
-  - **프리미엄 노이즈 프리 수리 버튼 (`MarkdownFixer`)**: 본문 텍스트를 절대 침범하지 않도록 코드 블록의 우측 밖 오프셋 좌표(`-60px`) 영역에 Gemini 전용 테마를 적용한 문자가 들어간 `"Fix"` 배지를 주입합니다. 호버 배경 전환이 부드럽게 감도는 이 버튼을 클릭하면 300ms의 페이드 마이크로 애니메이션과 함께 화면이 실시간 복구됩니다.
-- **의존성 역전 원칙(DIP)을 통한 무결한 파일 다운로드 파이프라인**:
-  - **인프라 캡슐화 (`BrowserFileExporter`)**: 가상 앵커를 띄워 다운로드를 물리적으로 촉발하는 저수준 DOM 조작 기술을 진입점(`content.ts`)에서 도려내어 전용 인프라 파일로 깔끔하게 격리 및 캡슐화했습니다.
-  - **순수 비즈니스 유스케이스 위임 (`ExportChatUseCase`)**: 코어 영역의 `ExportChatUseCase`는 특정 브라우저나 DOM에 대해 1%도 알 필요가 없도록 추상화된 포트(`FileExporter`)에만 의존하며, 최종 조율이 끝난 직후 포트에 다운로드 실행을 온전히 위임(Delegate)하여 비즈니스 절차를 종결합니다.
-- **성능과 크기 최적화**:
-  - 핵심 소스코드는 불필요한 서드파티 라이브러리를 단 하나도 도입하지 않고 오직 순수 바닐라 DOM API와 Web Utility를 기반으로만 구현하여, 컴파일 결과물 파일 크기를 **30.59 kB** 수준으로 초경량화하고 배포 안전성을 높였습니다.
+### A. 채팅 내보내기 드롭다운 통합 버튼 주입
+
+- 플로팅 버튼은 페이지의 중요한 영역(예: 스크롤 하단 바, 채팅 프롬프트 박스 등)을 가릴 우려가 있습니다.
+- 제미나이 상단의 대화 설정 버튼을 누르면 동적으로 삽입되는 `<gem-menu role="menu">` 드롭다운의 렌더링 시점을 `MutationObserver`로 포착합니다.
+- **오주입 차단을 위한 타겟 특정화**: `gem-menu` 엘리먼트가 모델 변경 드롭다운 등 다른 UI 요소에서도 범용으로 쓰이므로, 상단 점 3개 메뉴에만 내보내기 버튼이 정확하게 주입되도록 탑레벨 컴포넌트 `<conversation-actions-icon>` 내에서 현재 활성화된(`aria-expanded="true"`) 버튼의 `aria-controls` ID를 동적으로 추출하고, 이 ID가 생성된 `gem-menu` 요소의 ID 혹은 관계 구조와 정확히 매칭할 때만 주입을 허용하는 이중 검증 구조를 설계하여 UI 주입의 강건성을 완벽히 확보했습니다.
+- **단일 선택형 내보내기 드롭다운(Export Chat) 통합**:
+  - 기존의 여러 내보내기 버튼들을 단 하나의 **Export Chat** 아이템으로 통합했습니다.
+  - 메뉴 항목 내부에서 다운로드 포맷(Markdown 또는 Plain Text)을 선택할 수 있는 셀렉트 드롭다운과 실행 버튼("Go")을 결합해 이식했습니다.
+  - 옵션을 고를 때 드롭다운 설정 메뉴가 강제로 닫히지 않도록 **이벤트 버블링 차단(`stopPropagation()`)**을 적용해 자연스러운 사용성을 제공하며, 다운로드 완료 시점에는 메뉴가 깔끔하게 닫힙니다.
+
+### B. 대화창 너비 실시간 조절 기능 (Chat Width Adjuster) 상세 설계
+
+- 사용자의 모니터 폭과 작업 생산성 성향에 맞춰 제미나이 대화 영역의 가로 너비(`max-width`)를 400px~1120px(20px 단위) 사이로 자유롭게 동적 조절하는 프리미엄 컨트롤러 UI를 주입했습니다.
+- **동적 CSS 스타일 주입**: 브라우저의 `<head>` 영역에 `<style id="gemini-chat-width-style">` 태그를 생성 및 주입함으로써, Gemini 본연의 CSS specificity(선택자 우선순위) 제약을 완벽히 넘어서고 렌더링의 흔들림 없이 기존 대화 내역 및 실시간 동적 추가되는 신규 대화에 일률 적용합니다.
+- **Prompt 박스(`user-query`) 너비 동기화**: 단순 답변 텍스트 상자 영역뿐만 아니라 사용자가 작성한 질문 단락인 `user-query` 박스 역시 너비 조절 슬라이더에 동적으로 반응해 똑같이 넓어지고 좁아지도록 설계하여 전체 페이지의 좌우 정렬 일체감을 완성했습니다.
+- **인터랙션 방어 및 백그라운드 동기화**: 너비 슬라이더 조작(`input`, `change`, `mousedown` 등) 시 부모 노드에 클릭 전파가 새어나가지 않도록 이벤트 전파를 제어하여 설정 창이 도중에 닫히는 현상을 완전히 해결하였으며, 슬라이더 조작 종료 시 백그라운드 서비스 워커의 `chrome.storage.local` 스레드로 즉각 데이터를 동기화 저장하여 새로고침 시에도 영구 적용되도록 구축했습니다.
+
+### C. 우측 스크롤바 영역 플로팅 네비게이터 (Scroll-Navigator) 구현
+
+- **대화 스크롤바 컨테이너 정밀 표적화**: 제미나이 화면 상 다수의 무한 스크롤 영역 중 메인 대화창(`chat-window infinite-scroller`)만을 특정화하여 감지하고, 네비게이터 요소를 스크롤 컨테이너의 _부모_ 노드에 주입하여 스크롤 시 버튼이 함께 위로 휩쓸려 밀려나는 absolute 배치 한계를 완전히 해결했습니다.
+- **컴퓨티드 패딩 보정 (Dynamic Bounds)**: 고정된 높이를 쓰지 않고 컨테이너의 `padding-top` 및 `padding-bottom` 픽셀 크기를 실시간 계산하여 네비게이터의 상/하단 절대 마진선(16px 오프셋)을 잡음으로써, 상단 뷰포트 헤더나 하단 채팅 입력창과 겹치는 간섭 현상을 원천 방지했습니다.
+- **구체 트랙 정밀 안착 공식 (Encased Bounds Math)**: `26px` 너비의 버튼들이 트랙 라운드 레일 캡을 벗어나지 않도록 `calc((${pct * 100}% - ${pct * 26}px) + 13px)` 정렬 공식을 도입하여, 극값인 0% 및 100% 한계 위치에서도 네비게이션 버튼이 트랙 캡슐 내부에 항상 밀착 및 포함되도록 정밀 배치했습니다.
+- **5줄 멀티라인 요약 툴팁 설계 & 렌더링 버그 격파**:
+  - `<user-query>` 엘리먼트를 복제한 후 스크린 리더용 숨김 텍스트와 불필요한 미디어 버튼 노이즈를 완전 소거한 본문만을 요약 툴팁에 노출합니다.
+  - 툴팁이 좁은 절대 좌표 영역에서 단어 단위로 세로로 찌그러지던 문제를 `width: max-content`와 `max-width: 250px` 설정으로 정복했습니다.
+  - 컴파일/압축 번들링 과정에서 카멜 케이스 주입 시 속성이 탈락해 생략선 다음 줄에 글자가 계속 노출되던 브라우저 렌더링 버그를 우회하기 위해, DOM 메서드인 `.setProperty('-webkit-box-orient', 'vertical')` 및 `.setProperty('-webkit-line-clamp', '5')`를 명시적으로 주입하여 5줄 한도로 깨끗하게 오버플로우를 감추었습니다.
+  - 호버 피드백을 단정하게 유지하고자 슬라이딩 모션을 삭제하고 컴팩트한 `opacity 0.12s ease-out` 페이드 전환 효과만 탑재했습니다.
+- **커스텀 cubic-bezier 부드러운 스크롤 엔진 (`smoothScrollTo`)**: 느리고 프레임이 끊기는 네이티브 `scrollIntoView()`를 완전히 대체하는 물리적 스크롤 프레임 엔진을 구축했습니다. `requestAnimationFrame` 루프 내에서 가감속 곡선이 뛰어난 `easeInOutCubic` 이징 함수를 작동시켜, 스크롤 거리와 상관없이 정확히 **350ms** 시간 동안 부드럽게 감속하며 대상 질문 단락을 컨테이너 패딩 한계선에 딱 맞추어 정확하게 상단 스냅 정렬시킵니다.
+
+### D. 제미나이 불완전 마크다운 렌더링 실시간 복구 (Markdown Repairer) 엔진
+
+- **어긋난 HTML 스트리밍 감지**: 제미나이가 스트리밍 응답 도중 어긋난 마크다운 마크업(예: 닫히지 않은 코드 블록 등)을 생성하여 브라우저 렌더링이 심각하게 깨지고 코드 복사 바(Angular code-block)가 부분부분 엉뚱하게 오작동하는 현상을 실시간 DOM 감시를 통해 영리하게 포착합니다.
+- **경량 독립형 파서 구축 (`SimpleMarkdownParser`)**: 서드파티 하이라이팅 라이브러리 없이 순수 정규식과 Vanilla DOM API만으로 작동하는 초경량 정적 마크다운 파서를 `src/infra/`에 설계했습니다. 라이트/다크 테마 환경을 스스로 추적하여 눈이 편안한 고대비 테마 역전형 코드박스를 동적으로 빌드해 냅니다.
+- **무손실 DOM 서브트리 스왑 (`GeminiDomMarkdownRepairer`)**: Angular 데이터 바인딩이 묶인 최상위 요소나 복사/다운로드 기능이 오버레이된 원형 헤더 컨트롤군을 파괴하지 않고, 마크다운 문법이 유실되어 깨진 inner `<pre>` 요소만 미세 표적 사격하듯 타겟팅하여 무손실로 안전하게 스왑 교체합니다.
+- **프리미엄 노이즈 프리 수리 버튼 (`MarkdownFixer`)**: 본문 텍스트를 절대 침범하지 않도록 코드 블록의 우측 밖 오프셋 좌표(`-60px`) 영역에 Gemini 전용 테마를 적용한 문자가 들어간 `"Fix"` 배지를 주입합니다. 호버 배경 전환이 부드럽게 감도는 이 버튼을 클릭하면 300ms의 페이드 마이크로 애니메이션과 함께 화면이 실시간 복구됩니다.
 
 ---
 
-## 5. 자동화 빌드 및 크로스 플랫폼 패키징 (`archiver` 통합)
+## 5. 커스텀 노드 빌드 시스템 및 의존성 최적화
 
-- **Vite 커스텀 플러그인 구현**:
-  - `vite.config.ts` 파일 내부에 `chromeExtensionZip` 커스텀 플러그인을 구현했습니다.
-  - 빌드 프로세스의 마지막 수명 주기인 `closeBundle` 훅에 결합하여 작동합니다.
-  - 외부 `archiver` 모듈의 기본 CJS 모듈 호환성과 TypeScript typings를 위해 패키지를 `archiver@7.0.1`로 고정하고, `import archiver from 'archiver'` 정적 임포트 규칙을 온전히 유지함으로써 IDE 경고가 없는 완벽한 타입을 획득했습니다.
-- **압축 구조 및 최적화**:
-  - `pnpm build:zip` 실행 시 `dist/` 내부의 빌드된 결과물(`content.js` 및 `manifest.json`)만 격리하여 ZIP 파일의 **루트 경로**에 삽입합니다. (크롬 웹스토어 업로드 규격 완벽 대응)
-  - Zlib 레벨 9 최고 압축 효율을 적용하여 최종 패키지 아카이브 크기를 **4.79 KB** 수준으로 초경량 패키징하는 데 성공했습니다.
+전통적인 단일 구성 중심의 `vite.config.ts` 파일을 과감히 탈피하고, **TypeScript 기반의 커스텀 Node 스크립트 실행 환경(`vite-node`)**을 독자적으로 전면 구축했습니다.
+
+### 빌드 시스템 디렉토리 구조
+
+```
+scripts/
+├── config.ts                       # 공통 경로 별칭 및 각 타겟별(콘텐츠 스크립트 / 서비스 워커) 빌드 세부 옵션 정의
+├── plugins/
+│   └── zip.ts                      # 빌드가 완성된 dist/ 디렉토리를 크롬 웹스토어 업로드 규격 ZIP 파일로 패키징
+└── run/
+    └── build.ts                    # 전체 번들링 파이프라인의 조율자이자 실행 엔진 (Production & Watch 모드 지원)
+```
+
+### 왜 이 특수한 빌드 아키텍처가 필요했는가?
+
+1. **크롬 확장 프로그램의 Classic Script 제약**:
+   - 크롬 확장 프로그램의 `content_scripts`는 기본적으로 ESM이 아닌 **일반 클래식 스크립트**로 브라우저에 기동합니다. 즉, 빌드 결과물 내부에 다른 물리 JS 파일을 임포트하는 `import` 구문이 단 한 줄이라도 섞여 있으면, 크롬이 로딩 즉시 런타임 오류를 뿜으며 주입에 실패합니다. 따라서 빌드 결과물은 반드시 **완전히 자립적인 단일 즉시 실행 함수(Self-contained IIFE)** 형태여야 합니다.
+2. **Rollup 코드 스플리팅(Code Splitting) 한계 극복**:
+   - 만약 단일 빌드 설정으로 `content.ts`와 `sw.ts`를 동시에 컴파일하도록 전달하면, 번들러(Vite/Rollup)는 두 모듈이 공통 공유하는 타입이나 모듈 파일(`settings.ts`, `chat.ts` 등)을 식별하여 자동으로 `shared.js` 같은 공통 청크 조각으로 코드 스플리팅해 버립니다.
+   - 이렇게 되면 `content.js` 내부에 `import { AppSettings } from './shared.js'` 가 자동 주입되어 확장프로그램 주입 에러가 발생합니다.
+3. **IIFE 멀티 타겟 번들링의 한계**:
+   - Rollup은 하나의 빌드 파이프라인 하에서 멀티 엔트리를 잡아 이를 코드 쪼개짐 없이 두 개의 완벽한 개별 IIFE로 변환하는 설정을 아예 허용하지 않습니다.
+4. **해결 방안**:
+   - 이를 원천 극복하기 위해 `scripts/run/build.ts`가 Vite의 내부 `build` 컴파일러 API를 직접 호출하여, **콘텐츠 스크립트 빌드(이전 dist 비움)**와 **서비스 워커 빌드(이전 dist 유지)**를 순차적으로 완벽히 격리된 별개 샌드박스로 각각 총 2회 구동시킵니다.
+   - 이로 인해 어떠한 코드 분할 문제나 중복 설정 없이 깔끔하게 독립된 단일 IIFE 파일들(`content.js` 및 `sw.js`)이 산출되며, `package.json`의 빌드 명령어는 `vite-node scripts/run/build.ts` 단 하나로 완전 단일화되었습니다.
+
+### 개발자 경험 (DX) 개선 사양
+
+1. **경로 단축 별칭 (Path Aliases)**:
+   - `tsconfig.json` 및 `scripts/config.ts`에 절대 경로 매핑을 지정하여, 지저분하고 깨지기 쉬운 상대 경로 임포트를 소거했습니다.
+   - `@content/*` ➔ `src/content/*`
+   - `@sw/*` ➔ `src/sw/*`
+   - `@shared/*` ➔ `src/shared/*`
+2. **크롬 전역 API 컴파일 시인성 지원 (Autocompletion)**:
+   - `tsconfig.json`에 `types: ["chrome"]`을 공식 주입하여 크롬 확장 환경 개발 시 `chrome.storage`, `chrome.runtime` 등의 선언적 키워드에 대해 완벽한 IDE 디바이스 지능 및 실시간 컴파일 검증을 지원합니다.
 
 ---
 

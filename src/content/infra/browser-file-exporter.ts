@@ -1,5 +1,5 @@
-import { FileExporter } from '../core/ports/file-exporter';
-import { ExportResult } from '../core/models/chat';
+import { FileExporter } from '@content/core/ports/file-exporter';
+import { ExportResult } from '@shared/models/chat';
 
 export class BrowserFileExporter implements FileExporter {
   async exportFile(result: ExportResult): Promise<void> {

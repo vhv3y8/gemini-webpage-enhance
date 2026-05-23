@@ -1,13 +1,9 @@
-import { defineConfig } from 'vite';
 import { resolve } from 'path';
 import fs from 'fs';
 import archiver from 'archiver';
+import { Plugin } from 'vite';
 
-/**
- * Custom Vite plugin to automatically package the compiled dist folder
- * into a production-ready Chrome Extension ZIP archive using the 'archiver' library.
- */
-function chromeExtensionZip() {
+export function chromeExtensionZip(): Plugin {
   return {
     name: 'chrome-extension-zip',
     closeBundle() {
@@ -15,7 +11,7 @@ function chromeExtensionZip() {
 
       console.log('\n[Zip Plugin] Packaging extension into production ZIP archive using archiver...');
 
-      const zipPath = resolve(__dirname, 'gemini-chat-downloader.zip');
+      const zipPath = resolve(__dirname, '../../gemini-chat-downloader.zip');
       const output = fs.createWriteStream(zipPath);
       const archive = archiver('zip', {
         zlib: { level: 9 } // Maximum compression
@@ -37,33 +33,9 @@ function chromeExtensionZip() {
         console.error('[Zip Plugin] Packaging failed:', err);
       });
 
-      // Stream data to write stream
       archive.pipe(output);
-
-      // Append files from 'dist/' directory directly into the ZIP archive root
-      archive.directory('dist/', false);
-
-      // Finalize the archive (stream will close)
+      archive.directory(resolve(__dirname, '../../dist'), false);
       archive.finalize();
     }
   };
 }
-
-export default defineConfig({
-  plugins: [chromeExtensionZip()],
-  build: {
-    outDir: 'dist',
-    emptyOutDir: true,
-    minify: false, // Keep it readable for easier debugging and extension reviews
-    lib: {
-      entry: resolve(__dirname, 'src/content.ts'),
-      name: 'GeminiDownloader',
-      formats: ['iife'],
-      fileName: () => 'content.js',
-    },
-  },
-});
-
-
-
-

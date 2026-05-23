@@ -1,5 +1,5 @@
-import { ChatScraper } from '../../../core/ports/scraper';
-import { ChatSession, ChatMessage, ChatMessagePart } from '../../../core/models/chat';
+import { ChatScraper } from '@content/core/ports/scraper';
+import { ChatSession, ChatMessage, ChatMessagePart } from '@shared/models/chat';
 
 export class GeminiDomScraper implements ChatScraper {
   async scrape(): Promise<ChatSession> {
